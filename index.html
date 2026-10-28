@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08090a">
+<title>ETO // TERMINAL · dsh-eto-boot</title>
+<meta property="og:title" content="ETO // TERMINAL">
+<meta property="og:description" content="Earth-Trisolaris Organization boot terminal — 含终端语音与音效。">
+<style>
+html,body{margin:0;padding:0;height:100%;background:#08090a;overflow:hidden}
+#eto-init{position:fixed;inset:0;z-index:2147483001;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:#08090a;color:#e8eaec;font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;cursor:pointer;text-align:center;padding:0 24px}
+#eto-init .k{font-size:9px;letter-spacing:.44em;color:#7a8086}
+#eto-init .t{font-size:clamp(15px,4.6vw,20px);letter-spacing:.34em;text-indent:.34em}
+#eto-init .b{margin-top:6px;font-size:11px;letter-spacing:.34em;text-indent:.34em;color:#c8ccd0;border:1px solid rgba(232,234,236,.38);padding:13px 30px}
+#eto-init .s{font-size:9px;letter-spacing:.2em;color:#3e4347}
+#eto-replay{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2147483001;display:none;
+  font:11px/1 "JetBrains Mono",ui-monospace,Menlo,monospace;letter-spacing:.3em;color:#c8ccd0;background:rgba(8,9,10,.72);
+  border:1px solid rgba(190,200,210,.22);padding:13px 22px;cursor:pointer}
+#eto-replay:hover{color:#e8eaec;border-color:rgba(232,234,236,.5)}
+</style>
+<style>/* dsh-eto-boot — ETO 安全终端（登录）
+ *
+ * 结构、字距、交互照 https://shzqd1195-sys.github.io/eto/ 的登录幕复制：
+ * 徽记 → // EARTH-TRISOLARIS ORGANIZATION // → SECURE TERMINAL · CLEARANCE REQUIRED
+ * → ▍口令输入 → ENTER ACCESS PHRASE → 状态行 → 底部节点读数；输对口令后过一遍验证序列。
+ *
+ * 配色：近黑 #08090a、冷白 #e8eaec、暗灰 #7a8086、警示红 #a01a1a、
+ * 黄铜 #b88a3a；等宽字承担全部读数，中文宣言用衬线。
+ */
+.eto {
+  --bg: #08090a;
+  --ink: #c8ccd0;
+  --ink-bright: #e8eaec;
+  --ink-dim: #7a8086;
+  --ink-faint: #3e4347;
+  --red: #a01a1a;
+  --red-glow: #d33;
+  --amber: #b88a3a;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Cascadia Mono", monospace;
+  --serif: "Cormorant Garamond", "Noto Serif SC", "Songti SC", "SimSun", serif;
+
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  contain: layout paint style;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  font-family: var(--mono);
+}
+.eto * { margin: 0; padding: 0; box-sizing: border-box; }
+.eto.is-out { transition: opacity 1.2s ease; opacity: 0; }
+
+/* ── CRT 叠层 ─────────────────────────────────────────────── */
+.crt-scanlines, .crt-noise, .crt-vignette { position: absolute; inset: 0; pointer-events: none; }
+.crt-scanlines {
+  background: repeating-linear-gradient(0deg, rgba(232, 234, 236, .05) 0 1px, transparent 1px 3px);
+  opacity: .55;
+  mix-blend-mode: screen;
+}
+.crt-noise {
+  opacity: .05;
+  mix-blend-mode: overlay;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.5) 0 .5px, transparent .5px 2px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.4) 0 .5px, transparent .5px 3px);
+  background-size: 3px 3px, 4px 4px;
+}
+.crt-vignette {
+  background: radial-gradient(118% 92% at 50% 42%, rgba(0,0,0,0) 32%, rgba(0,0,0,.76) 100%);
+}
+
+/* ── 登录幕 ───────────────────────────────────────────────── */
+.gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 1.4s ease;
+}
+.gate-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(440px, 88vw);
+  animation: slowFadeIn 1.6s ease both;
+}
+.gate-logo { margin-bottom: 38px; }
+.eto-logo { width: 96px; height: 96px; }
+.eto-logo svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.eto-logo .ring { fill: none; stroke: rgba(232, 234, 236, .45); stroke-width: .6; }
+.eto-logo .tick { stroke: rgba(232, 234, 236, .55); stroke-width: .6; }
+.eto-logo .orbit { fill: none; stroke: rgba(232, 234, 236, .72); stroke-width: 1; transform-origin: 50% 50%; }
+.eto-logo .o1 { animation: orbitSpin1 38s linear infinite; }
+.eto-logo .o2 { animation: orbitSpin1 56s linear infinite reverse; }
+.eto-logo .o3 { animation: orbitSpin1 74s linear infinite; }
+.eto-logo .star { fill: #e8eaec; opacity: .85; }
+.eto-logo .core { fill: none; stroke: rgba(232, 234, 236, .16); stroke-width: .5; }
+
+.gate-title {
+  font-size: 12.5px;
+  letter-spacing: .42em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 28px;
+  text-align: center;
+}
+.gate-sub {
+  font-size: 11px;
+  letter-spacing: .32em;
+  color: var(--ink-dim);
+  text-align: center;
+  margin-bottom: 42px;
+  text-transform: uppercase;
+}
+
+.gate-sub-cn {
+  margin-top: -30px;
+  margin-bottom: 42px;
+  font-size: 10px;
+  letter-spacing: .3em;
+  color: var(--ink-faint);
+  text-align: center;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-bottom: 1px solid var(--ink-faint);
+  padding: 8px 2px;
+  transition: border-color .4s;
+}
+.input-row.focus { border-bottom-color: var(--ink-bright); }
+.input-row.error { border-bottom-color: var(--red); }
+.prompt-glyph { color: var(--ink-dim); margin-right: 10px; font-size: 12px; }
+.input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--ink-bright);
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: .26em;
+  caret-color: transparent;
+}
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: var(--ink-bright);
+  margin-left: 2px;
+  animation: cursorBlink 1.1s steps(1) infinite;
+}
+.gate-hint {
+  margin-top: 14px;
+  font-size: 9px;
+  letter-spacing: .3em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  text-align: center;
+}
+.gate-status {
+  margin-top: 18px;
+  font-size: 11px;
+  letter-spacing: .28em;
+  color: var(--red);
+  text-transform: uppercase;
+  min-height: 14px;
+  opacity: 0;
+  transition: opacity .3s;
+  text-align: center;
+}
+.gate-status.show { opacity: 1; }
+
+.gate-meta {
+  position: absolute;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 22px;
+  font-size: 9px;
+  letter-spacing: .22em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.gate-meta .blink { animation: softPulse 2s ease-in-out infinite; }
+
+.gate.shake { animation: shake .5s; }
+.gate.interference { position: absolute; }
+.gate.interference::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(0deg, transparent 49%, rgba(255, 80, 80, .18) 50%, transparent 51%),
+    linear-gradient(0deg, transparent 30%, rgba(255, 255, 255, .05) 31%, transparent 32%);
+  animation: glitchBars .6s steps(8);
+}
+
+/* ── 验证序列 ─────────────────────────────────────────────── */
+.verify {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: var(--bg);
+}
+.verify.show { display: flex; }
+.vlines {
+  width: min(720px, 92vw);
+  font-size: 14px;
+  line-height: 1.7;
+  letter-spacing: .06em;
+  color: var(--ink);
+  text-align: left;
+}
+.vline { opacity: 0; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
+.vline.show { opacity: 1; }
+.vline.bigfinal {
+  font-size: 22px;
+  letter-spacing: .3em;
+  color: var(--ink-bright);
+  margin-top: 40px;
+  text-align: center;
+}
+
+/* ── 宣言收尾 ─────────────────────────────────────────────── */
+.final {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 24px;
+  background: var(--bg);
+  text-align: center;
+}
+.final.on { display: flex; }
+.final-kicker { font-size: 9px; letter-spacing: .34em; color: var(--red-glow); opacity: .8; }
+.final-cn {
+  font-family: var(--serif);
+  font-size: clamp(26px, 7.6vw, 42px);
+  font-weight: 500;
+  letter-spacing: .2em;
+  text-indent: .2em;
+  line-height: 1.45;
+  color: var(--ink-bright);
+}
+.final-en { margin-top: 16px; font-size: 8px; letter-spacing: .24em; color: var(--ink-dim); }
+
+/* ── 跳过 / 动效 ──────────────────────────────────────────── */
+.skip {
+  position: absolute;
+  right: calc(14px + env(safe-area-inset-right));
+  top: calc(14px + env(safe-area-inset-top));
+  z-index: 6;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: .24em;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid rgba(190, 200, 210, .16);
+  padding: 7px 13px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.skip:active { color: var(--ink-bright); border-color: rgba(232, 234, 236, .45); }
+.eto.no-skip .skip { display: none; }
+
+@keyframes slowFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes softPulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
+@keyframes cursorBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes orbitSpin1 { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@keyframes glitchBars {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 0 100vh, 0 -100vh; }
+}
+
+@media (max-height: 560px) {
+  .gate-logo { margin-bottom: 20px; }
+  .eto-logo { width: 64px; height: 64px; }
+  .gate-title { margin-bottom: 16px; }
+  .gate-sub { margin-bottom: 24px; }
+  .vline { margin-bottom: 10px; }
+  .vline.bigfinal { font-size: 18px; margin-top: 22px; }
+}
+</style>
+</head>
+<body>
+<div id="eto-root" class="eto" role="dialog" aria-modal="true" aria-label="ETO 安全终端">
+  <div class="crt-scanlines"></div>
+  <div class="crt-noise"></div>
+  <div class="crt-vignette"></div>
+
+  <div id="eto-gate" class="gate">
+    <div class="gate-inner">
+      <div class="gate-logo">
+        <div class="eto-logo">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle class="ring" cx="50" cy="50" r="48"/>
+            <circle class="ring" cx="50" cy="50" r="44"/>
+            <g class="tick">
+              <line x1="50" y1="2" x2="50" y2="6"/>
+              <line x1="50" y1="94" x2="50" y2="98"/>
+              <line x1="2" y1="50" x2="6" y2="50"/>
+              <line x1="94" y1="50" x2="98" y2="50"/>
+              <line x1="14.6" y1="14.6" x2="17.4" y2="17.4"/>
+              <line x1="82.6" y1="82.6" x2="85.4" y2="85.4"/>
+              <line x1="85.4" y1="14.6" x2="82.6" y2="17.4"/>
+              <line x1="17.4" y1="82.6" x2="14.6" y2="85.4"/>
+            </g>
+            <g class="orbit o1"><ellipse cx="50" cy="50" rx="32" ry="14"/></g>
+            <g class="orbit o2"><ellipse cx="50" cy="50" rx="32" ry="14" transform="rotate(60 50 50)"/></g>
+            <g class="orbit o3"><ellipse cx="50" cy="50" rx="32" ry="14" transform="rotate(120 50 50)"/></g>
+            <circle class="star" cx="50" cy="22" r="2.4"/>
+            <circle class="star" cx="74.2" cy="64" r="2.4"/>
+            <circle class="star" cx="25.8" cy="64" r="2.4"/>
+            <polygon class="core" points="50,22 74.2,64 25.8,64"/>
+            <circle class="star" cx="50" cy="50" r="1.6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="gate-title">// EARTH-TRISOLARIS ORGANIZATION //</div>
+      <div class="gate-sub">SECURE TERMINAL · CLEARANCE REQUIRED</div>
+      <div class="gate-sub-cn">安全终端 · 需要访问许可</div>
+      <div class="input-row" id="eto-row">
+        <span class="prompt-glyph">▍</span>
+        <input type="password" id="eto-phrase" autocomplete="off" spellcheck="false" autocapitalize="off" aria-label="访问口令">
+        <span class="caret"></span>
+      </div>
+      <div class="gate-hint" id="eto-hint">ENTER ACCESS PHRASE · 输入访问口令</div>
+      <div class="gate-status" id="eto-status"></div>
+    </div>
+    <div class="gate-meta">
+      <div>NODE 0734 · UNREGISTERED</div>
+      <div class="blink">// MONITORING ACTIVE //</div>
+      <div>v.II.3.7</div>
+    </div>
+  </div>
+
+  <div id="eto-verify" class="verify">
+    <div class="vlines" id="eto-vlines">
+      <div class="vline" data-text="&gt; 正在与节点 ████-0734 建立握手 …"></div>
+      <div class="vline" data-text="&gt; 经由 7 条匿名中继路由 …"></div>
+      <div class="vline" data-text="&gt; 正在核验身份 …"></div>
+      <div class="vline" data-text="&gt; 交叉比对生物特征签名 …"></div>
+      <div class="vline" data-text="&gt; 信号源已确认。"></div>
+      <div class="vline" data-text="&gt; 欢迎，同志。"></div>
+      <div class="vline bigfinal" data-text="你并不孤单。"></div>
+    </div>
+  </div>
+
+  <div id="eto-final" class="final">
+    <div class="final-kicker">// 主已注视此节点 //</div>
+    <div class="final-cn">消灭人类暴政</div>
+    <div class="final-cn">世界属于三体</div>
+    <div class="final-en">DESTROY HUMAN TYRANNY · THE WORLD BELONGS TO TRISOLARIS</div>
+  </div>
+
+  <button id="eto-skip" type="button" class="skip">跳过 SKIP</button>
+</div>
+
+<div id="eto-init" role="button" tabindex="0" aria-label="初始化信道">
+  <div class="k">EARTH-TRISOLARIS ORGANIZATION</div>
+  <div class="t">INITIALIZE CHANNEL</div>
+  <div class="b">▶ 点击开始</div>
+  <div class="s">含中文语音与音效 · 请先打开音量</div>
+</div>
+<button id="eto-replay" type="button">▶ REPLAY · 重播</button>
+<script id="eto-src" type="text/plain">/* dsh-eto-boot — ETO 安全终端（登录）
+ *
+ * 照 https://shzqd1195-sys.github.io/eto/ 的登录幕做：
+ *
+ *   徽记 → // EARTH-TRISOLARIS ORGANIZATION // → SECURE TERMINAL · CLEARANCE REQUIRED
+ *   → ▍ 口令输入 → ENTER ACCESS PHRASE → 状态行
+ *   → 输对：ACCESS GRANTED → 验证序列逐行打字 → YOU ARE NOT ALONE
+ *   → 宣言「消灭人类暴政 / 世界属于三体」→ 交还给应用
+ *
+ * 口令只以 SHA-256 密文形式存在（PHRASE_HASH），输入后现算现比，源码里没有明文。
+ * 语音全部中文（系统 TTS），音效由 WebAudio 现场合成，没有任何音频文件。
+ */
+(function () {
+  'use strict'
+
+  var CFG = window.__ETO_CFG__ || {}
+  var KEY = 'dsh-eto-boot:shown'
+
+  if (!CFG.preview) {
+    if (CFG.enabled === false) return
+    try {
+      var mode = CFG.mode || 'session'
+      if (mode === 'session' && window.sessionStorage.getItem(KEY) === '1') return
+      if (mode === 'daily') {
+        var day = new Date().toISOString().slice(0, 10)
+        if (window.localStorage.getItem(KEY) === day) return
+      }
+      if (mode === 'session') window.sessionStorage.setItem(KEY, '1')
+      if (mode === 'daily') window.localStorage.setItem(KEY, day)
+    } catch (err) { /* 隐私模式读不到 storage：照常播放 */ }
+  }
+
+  var root = document.getElementById('eto-root')
+  if (!root) return
+  var html = document.documentElement
+  var gate = document.getElementById('eto-gate')
+  var row = document.getElementById('eto-row')
+  var input = document.getElementById('eto-phrase')
+  var statusEl = document.getElementById('eto-status')
+  var verifyEl = document.getElementById('eto-verify')
+  var vlinesEl = document.getElementById('eto-vlines')
+  var finalEl = document.getElementById('eto-final')
+  var skipBtn = document.getElementById('eto-skip')
+  if (!gate || !input) return
+  if (CFG.allowSkip === false) root.className += ' no-skip'
+
+  /* ── 口令：只有密文，没有明文 ──────────────────────────────────────
+   * 输入后现算 SHA-256 与 PHRASE_HASH 比对；源码里不出现明文，也不回显输入。 */
+  var PHRASE_HASH = '537ac8980f835085723b1b237174bddc644121fe7e23c7750504f02152e31fc8'
+
+  function sha256(ascii) {
+    function rightRotate(value, amount) { return (value >>> amount) | (value << (32 - amount)) }
+    var mathPow = Math.pow
+    var maxWord = mathPow(2, 32)
+    var i, j
+    var result = ''
+    var words = []
+    var asciiBitLength = ascii.length * 8
+    var hash = sha256.h = sha256.h || []
+    var k = sha256.k = sha256.k || []
+    var primeCounter = k.length
+    var isComposite = {}
+    for (var candidate = 2; primeCounter < 64; candidate++) {
+      if (!isComposite[candidate]) {
+        for (i = 0; i < 313; i += candidate) isComposite[i] = candidate
+        hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0
+        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0
+      }
+    }
+    ascii += '\x80'
+    while (ascii.length % 64 - 56) ascii += '\x00'
+    for (i = 0; i < ascii.length; i++) {
+      j = ascii.charCodeAt(i)
+      if (j >> 8) return ''
+      words[i >> 2] |= j << (((3 - i) % 4) * 8)
+    }
+    words[words.length] = (asciiBitLength / maxWord) | 0
+    words[words.length] = asciiBitLength
+    for (j = 0; j < words.length;) {
+      var w = words.slice(j, (j += 16))
+      var oldHash = hash.slice(0, 8)
+      for (i = 0; i < 64; i++) {
+        var w15 = w[i - 15]
+        var w2 = w[i - 2]
+        var a = hash[0]
+        var e = hash[4]
+        var temp1 = hash[7] +
+          (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+          ((e & hash[5]) ^ (~e & hash[6])) +
+          k[i] +
+          (w[i] = i < 16 ? w[i] : (
+            w[i - 16] +
+            (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+            w[i - 7] +
+            (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
+          ) | 0)
+        var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+          ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]))
+        hash = [(temp1 + temp2) | 0].concat(hash)
+        hash[4] = (hash[4] + temp1) | 0
+      }
+      for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0
+    }
+    for (i = 0; i < 8; i++) {
+      for (j = 3; j + 1; j--) {
+        var b = (hash[i] >> (j * 8)) & 255
+        result += (b < 16 ? '0' : '') + b.toString(16)
+      }
+    }
+    return result
+  }
+
+  /* ── 声音：中文语音（系统 TTS）+ 现场合成的终端音效 ────────────── */
+  var VOICE_ON = CFG.voice !== false
+  var SOUND_ON = CFG.sound !== false
+  var ac = null
+  var master = null
+  var voiceList = null
+
+  function audio() {
+    if (!SOUND_ON) return null
+    if (ac === null) {
+      var Ctor = window.AudioContext || window.webkitAudioContext
+      if (!Ctor) return null
+      try {
+        ac = new Ctor()
+        master = ac.createGain()
+        master.gain.value = 0.3
+        master.connect(ac.destination)
+      } catch (err) { ac = null; return null }
+    }
+    return ac.state === 'running' ? ac : null
+  }
+
+  function primeVoices() {
+    try { voiceList = window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : [] }
+    catch (err) { voiceList = [] }
+  }
+
+  function pickVoice(lang) {
+    if (!window.speechSynthesis) return null
+    if (!voiceList) primeVoices()
+    var want = String(lang || 'zh').slice(0, 2).toLowerCase()
+    for (var i = 0; i < (voiceList || []).length; i += 1) {
+      var v = voiceList[i]
+      if (String(v.lang || '').toLowerCase().indexOf(want) === 0) return v
+    }
+    return null
+  }
+
+  function unlock() {
+    if (SOUND_ON) {
+      if (ac === null) audio()
+      if (ac !== null && ac.state === 'suspended' && ac.resume) {
+        try { ac.resume() } catch (err) { /* noop */ }
+      }
+    }
+  }
+
+  function speak(text, rate, pitch) {
+    if (!VOICE_ON || !text) return
+    try {
+      var ss = window.speechSynthesis
+      if (!ss || typeof window.SpeechSynthesisUtterance !== 'function') return
+      var u = new window.SpeechSynthesisUtterance(text)
+      u.lang = 'zh-CN'
+      u.rate = rate || 0.95
+      u.pitch = pitch || 1
+      u.volume = 1
+      var v = pickVoice('zh')
+      if (v) u.voice = v
+      ss.speak(u)
+    } catch (err) { /* 没有 TTS 就只剩音效 */ }
+  }
+
+  function tone(freq, dur, type, vol, slideTo, delay) {
+    var c = audio()
+    if (!c) return
+    var t0 = c.currentTime + (delay || 0)
+    try {
+      var o = c.createOscillator()
+      var g = c.createGain()
+      o.type = type || 'sine'
+      o.frequency.setValueAtTime(freq, t0)
+      if (slideTo && slideTo !== freq) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur)
+      g.gain.setValueAtTime(0.0001, t0)
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+      o.connect(g)
+      g.connect(master)
+      o.start(t0)
+      o.stop(t0 + dur + 0.06)
+    } catch (err) { /* noop */ }
+  }
+
+  function noise(dur, vol, cutoff, delay) {
+    var c = audio()
+    if (!c) return
+    try {
+      var len = Math.max(1, Math.floor(c.sampleRate * dur))
+      var buf = c.createBuffer(1, len, c.sampleRate)
+      var data = buf.getChannelData(0)
+      for (var i = 0; i < len; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / len)
+      var src = c.createBufferSource()
+      src.buffer = buf
+      var filter = c.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.value = cutoff || 1200
+      var g = c.createGain()
+      g.gain.value = vol
+      src.connect(filter)
+      filter.connect(g)
+      g.connect(master)
+      src.start(c.currentTime + (delay || 0))
+    } catch (err) { /* noop */ }
+  }
+
+  var sfx = {
+    ping: function () { tone(1420, 0.14, 'sine', 0.04) },
+    tick: function () { noise(0.05, 0.05, 2200, 0); tone(1200, 0.03, 'square', 0.015) },
+    deny: function () { tone(120, 0.28, 'square', 0.07, 90, 0); noise(0.18, 0.06, 700, 0) },
+    accept: function () { tone(523, 0.14, 'triangle', 0.06); tone(784, 0.2, 'triangle', 0.06, 784, 0.12) },
+    pad: function () { tone(164, 2.6, 'sine', 0.045); tone(246, 2.6, 'sine', 0.03, 246, 0.05) }
+  }
+
+  document.addEventListener('pointerdown', unlock, { passive: true })
+  document.addEventListener('keydown', unlock)
+
+  /* ── 流程 ───────────────────────────────────────────────────────── */
+  var finished = false
+  var granted = false
+  var attempts = 0
+  var timers = []
+
+  function later(fn, ms) {
+    var id = window.setTimeout(fn, ms)
+    timers.push(id)
+    return id
+  }
+
+  function finish() {
+    if (finished) return
+    finished = true
+    for (var i = 0; i < timers.length; i += 1) window.clearTimeout(timers[i])
+    timers = []
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel() } catch (err) { /* noop */ }
+    try {
+      root.className += ' is-out'
+      html.classList.remove('eto-lock')
+      html.classList.remove('eto-first')
+      if (window.__etoFirstFrame) window.__etoFirstFrame.end()
+      window.setTimeout(function () {
+        if (root.parentNode) root.parentNode.removeChild(root)
+      }, 1240)
+    } catch (err) { /* 收尾失败也不能卡住页面 */ }
+    window.__ETO_DONE__ = true
+  }
+
+  function setStatus(text, color) {
+    if (!statusEl) return
+    statusEl.textContent = text
+    statusEl.style.color = color || ''
+    statusEl.classList.add('show')
+  }
+
+  function clearStatus() {
+    if (!statusEl) return
+    statusEl.classList.remove('show')
+    statusEl.textContent = ''
+  }
+
+  function submit() {
+    if (granted || finished) return
+    var raw = (input.value || '').trim().toLowerCase()
+    if (raw === '') {
+      setStatus('ACCESS DENIED · 拒绝访问', 'var(--red)')
+      speak('口令不能为空。', 0.98, 1)
+      return
+    }
+    if (sha256(raw) === PHRASE_HASH) accept()
+    else reject()
+  }
+
+  function reject() {
+    attempts += 1
+    row.classList.add('error')
+    setStatus('ACCESS DENIED · 拒绝访问', 'var(--red)')
+    gate.classList.add('shake')
+    gate.classList.add('interference')
+    sfx.deny()
+    speak(attempts >= 3 ? '口令错误。本次尝试将被记录。' : '口令错误。', 0.98, 1)
+    later(function () {
+      gate.classList.remove('shake')
+      gate.classList.remove('interference')
+    }, 700)
+    later(function () {
+      clearStatus()
+      row.classList.remove('error')
+      input.value = ''
+      unlock()
+      try { input.focus() } catch (err) { /* noop */ }
+    }, 2200)
+  }
+
+  function accept() {
+    granted = true
+    row.classList.remove('error')
+    setStatus('ACCESS GRANTED · 已授权', 'var(--ink-bright)')
+    sfx.accept()
+    speak('口令正确。正在建立握手。', 0.95, 1)
+    later(function () {
+      gate.style.opacity = '0'
+      later(function () {
+        gate.style.display = 'none'
+        runVerify()
+      }, 1400)
+    }, 700)
+  }
+
+  var LINE_VOICE = {
+    2: '正在核验身份。',
+    4: '信号源已确认。',
+    5: '欢迎回来，同志。'
+  }
+
+  function runVerify() {
+    if (!verifyEl) { showFinale(); return }
+    verifyEl.classList.add('show')
+    var lines = vlinesEl ? vlinesEl.querySelectorAll('.vline') : []
+    var i = 0
+
+    function typeLine() {
+      if (i >= lines.length) {
+        later(showFinale, 900)
+        return
+      }
+      var el = lines[i]
+      var text = el.getAttribute('data-text') || el.textContent || ''
+      var big = (el.className || '').indexOf('bigfinal') >= 0
+      el.classList.add('show')
+      sfx.tick()
+      if (LINE_VOICE[i]) speak(LINE_VOICE[i], 0.95, 1)
+      var j = 0
+      var interval = big ? 38 : 9
+      function ch() {
+        if (j > text.length) {
+          i += 1
+          later(typeLine, big ? 900 : 180)
+          return
+        }
+        el.textContent = text.substring(0, j) + (j < text.length ? '▍' : '')
+        j += 1
+        window.setTimeout(ch, interval + Math.random() * 14)
+      }
+      ch()
+    }
+    later(typeLine, 500)
+  }
+
+  function showFinale() {
+    if (finished) return
+    if (finalEl) finalEl.classList.add('on')
+    sfx.pad()
+    speak('你并不孤单。消灭人类暴政，世界属于三体。', 0.9, 1)
+    later(finish, 5200)
+  }
+
+  /* ── 交互 ───────────────────────────────────────────────────────── */
+  input.addEventListener('focus', function () { row.classList.add('focus') })
+  input.addEventListener('blur', function () { row.classList.remove('focus') })
+  input.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault()
+      unlock()
+      submit()
+    }
+  })
+
+  gate.addEventListener('click', function (ev) {
+    if (ev && ev.target === input) return
+    unlock()
+    try { input.focus() } catch (err) { /* noop */ }
+  })
+
+  if (skipBtn) skipBtn.addEventListener('click', function (ev) { ev.stopPropagation(); finish() })
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' || ev.key === 'Esc') finish()
+  })
+  window.addEventListener('pagehide', finish)
+  window.addEventListener('beforeunload', finish)
+
+  try {
+    html.classList.add('eto-lock')
+    audio()
+  } catch (err) { /* noop */ }
+
+  /* 首帧已经画好（登录幕是纯 DOM），撤掉 Host 的遮挡层 */
+  window.setTimeout(function () {
+    if (window.__etoFirstFrame) window.__etoFirstFrame.end()
+  }, 30)
+
+  sfx.ping()
+  later(function () { speak('安全终端。请输入访问口令。', 0.95, 1) }, 600)
+
+  if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+    later(function () { try { input.focus() } catch (err) { /* noop */ } }, 900)
+  }
+})();
+</script>
+<script>
+(function () {
+  var src = document.getElementById('eto-src').textContent;
+  var init = document.getElementById('eto-init');
+  var replay = document.getElementById('eto-replay');
+  window.__ETO_CFG__ = {"enabled":true,"mode":"always","askPermission":true,"allowSkip":true,"voice":true,"sound":true,"name":"执剑人","brand":"DEEPSEEK","preview":true};
+  function boot() {
+    if (init && init.parentNode) init.parentNode.removeChild(init);
+    var s = document.createElement('script');
+    s.textContent = src;
+    document.body.appendChild(s);
+  }
+  init.addEventListener('click', boot);
+  init.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') boot(); });
+  replay.addEventListener('click', function () { location.reload(); });
+  setInterval(function () { if (window.__ETO_DONE__) replay.style.display = 'block'; }, 250);
+})();
+</script>
+</body>
+</html>
